@@ -200,16 +200,17 @@ class GoogleServicesPlugin implements Plugin<Project> {
 
     // This is neccesary for backwards compatibility with versions of gradle that do not support
     // this new API.
-    if (variant.metaClass.respondsTo(variant, "applicationIdTextResource")
-            || variant.metaClass.hasProperty(variant, "applicationIdTextResource")) {
-      print("OKA GOOGLE SERVICE")
-      print(variant)
-      print(variant.applicationIdTextResource)
-      task.packageNameXOR2 = variant.applicationIdTextResource
-      task.dependsOn(variant.applicationIdTextResource)
-    } else {
+//    if (variant.metaClass.respondsTo(variant, "applicationIdTextResource")
+//            || variant.metaClass.hasProperty(variant, "applicationIdTextResource")) {
+      println("OKA GOOGLE SERVICE")
+      println(variant)
+      println(variant.applicationId)
+//      println(variant.applicationIdTextResource)
+//      task.packageNameXOR2 = variant.applicationIdTextResource
+//      task.dependsOn(variant.applicationIdTextResource)
+//    } else {
       task.packageNameXOR1 = variant.applicationId
-    }
+//    }
 
     // Use the target version for the task.
     variant.registerResGeneratingTask(task, outputDir)
