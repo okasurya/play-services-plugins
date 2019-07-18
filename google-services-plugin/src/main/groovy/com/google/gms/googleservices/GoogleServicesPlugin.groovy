@@ -16,13 +16,27 @@
 
 package com.google.gms.googleservices
 
-import com.google.android.gms.dependencies.DependencyAnalyzer
-import com.google.android.gms.dependencies.DependencyInspector
-import org.gradle.api.Plugin
-import org.gradle.api.Project
-
+import com.google.android.gms.dependencies.DependencyAnalyzer;
+import com.google.android.gms.dependencies.DependencyInspector;
+import java.util.HashSet
+import java.util.HashMap
+import java.util.SortedSet
+import java.util.TreeSet
 import java.util.regex.Matcher
 import java.util.regex.Pattern
+import org.gradle.BuildListener
+import org.gradle.BuildResult
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.DependencyResolutionListener
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.artifacts.ResolvableDependencies
+import org.gradle.api.initialization.Settings
+import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency
+import org.gradle.api.invocation.Gradle
+import org.gradle.api.GradleException
+import org.gradle.api.Plugin
+import org.gradle.api.Project
 
 class GoogleServicesPlugin implements Plugin<Project> {
 
@@ -51,19 +65,19 @@ class GoogleServicesPlugin implements Plugin<Project> {
   // These are the plugin types and the set of associated plugins whose presence should be checked for.
   private final static enum PluginType{
     APPLICATION([
-      "android",
-      "com.android.application"
+            "android",
+            "com.android.application"
     ]),
     LIBRARY([
-      "android-library",
-      "com.android.library"
+            "android-library",
+            "com.android.library"
     ]),
     FEATURE([
-      "android-feature",
-      "com.android.feature"
+            "android-feature",
+            "com.android.feature"
     ]),
     MODEL_APPLICATION([
-      "com.android.model.application"
+            "com.android.model.application"
     ]),
     MODEL_LIBRARY(["com.android.model.library"])
     public PluginType(Collection plugins) {
@@ -75,9 +89,11 @@ class GoogleServicesPlugin implements Plugin<Project> {
     }
   }
 
+  public static GoogleServicesPluginConfig config = new GoogleServicesPluginConfig()
+
   @Override
   void apply(Project project) {
-    GoogleServicesPluginConfig config = project.extensions.create('googleServices', GoogleServicesPluginConfig)
+    config = project.extensions.create('googleServices', GoogleServicesPluginConfig)
 
     project.afterEvaluate {
       if (config.disableVersionCheck) {
@@ -85,10 +101,10 @@ class GoogleServicesPlugin implements Plugin<Project> {
       }
       DependencyAnalyzer globalDependencies = new DependencyAnalyzer()
       project.getGradle().addListener(
-        new DependencyInspector(globalDependencies, project.getName(),
-            "This error message came from the google-services Gradle plugin, report" +
-                " issues at https://github.com/google/play-services-plugins and disable by " +
-                "adding \"googleServices { disableVersionCheck = false }\" to your build.gradle file."));
+              new DependencyInspector(globalDependencies, project.getName(),
+                      "This error message came from the google-services Gradle plugin, report" +
+                              " issues at https://github.com/google/play-services-plugins and disable by " +
+                              "adding \"googleServices { disableVersionCheck = false }\" to your build.gradle file."));
     }
     for (PluginType pluginType : PluginType.values()) {
       for (String plugin : pluginType.plugins()) {
@@ -117,7 +133,7 @@ class GoogleServicesPlugin implements Plugin<Project> {
 
   private void showWarningForPluginLocation(Project project) {
     project.getLogger().warn(
-        "Warning: Please apply google-services plugin at the bottom of the build file.")
+            "Warning: Please apply google-services plugin at the bottom of the build file.")
   }
 
   private void setupPlugin(Project project, PluginType pluginType) {
@@ -152,7 +168,7 @@ class GoogleServicesPlugin implements Plugin<Project> {
 
 
   private static void handleVariant(Project project,
-      def variant) {
+                                    def variant) {
 
     File quickstartFile = null
     List<String> fileLocations = getJsonLocations("$variant.dirName", project)
@@ -172,35 +188,31 @@ class GoogleServicesPlugin implements Plugin<Project> {
     }
 
     File outputDir =
-        project.file("$project.buildDir/generated/res/google-services/$variant.dirName")
+            project.file("$project.buildDir/generated/res/google-services/$variant.dirName")
 
     GoogleServicesTask task = project.tasks
-        .create("process${variant.name.capitalize()}GoogleServices",
-         GoogleServicesTask)
+            .create("process${variant.name.capitalize()}GoogleServices",
+            GoogleServicesTask)
 
     task.quickstartFile = quickstartFile
     task.intermediateDir = outputDir
     task.searchedLocation = searchedLocation
 
-    // This is necessary for backwards compatibility with versions of gradle that do not support
+    // This is neccesary for backwards compatibility with versions of gradle that do not support
     // this new API.
-    if (variant.respondsTo("applicationIdTextResource")) {
+    if (variant.metaClass.respondsTo(variant, "applicationIdTextResource")
+            || variant.metaClass.hasProperty(variant, "applicationIdTextResource")) {
+      print("OKA GOOGLE SERVICE")
+      print(variant)
+      print(variant.applicationIdTextResource)
       task.packageNameXOR2 = variant.applicationIdTextResource
       task.dependsOn(variant.applicationIdTextResource)
     } else {
       task.packageNameXOR1 = variant.applicationId
     }
 
-    // This is necessary for backwards compatibility with versions of gradle that do not support
-    // this new API.
-    if (variant.respondsTo("registerGeneratedResFolders")) {
-      task.ext.generatedResFolders = project.files(outputDir).builtBy(task)
-      variant.registerGeneratedResFolders(task.generatedResFolders)
-      variant.mergeResources.dependsOn(task)
-    } else {
-      //noinspection GrDeprecatedAPIUsage
-      variant.registerResGeneratingTask(task, outputDir)
-    }
+    // Use the target version for the task.
+    variant.registerResGeneratingTask(task, outputDir)
   }
 
   private static List<String> splitVariantNames(String variant) {
@@ -227,7 +239,7 @@ class GoogleServicesPlugin implements Plugin<Project> {
     List<String> fileLocations = new ArrayList<>()
     if (!variantMatcher.matches()) {
       project.getLogger().warn("$variantDirname failed to parse into flavors. Please start " +
-        "all flavors with a lowercase character")
+              "all flavors with a lowercase character")
       fileLocations.add("src/$variantDirname")
       return fileLocations
     }
@@ -259,3 +271,4 @@ class GoogleServicesPlugin implements Plugin<Project> {
     boolean disableVersionCheck = false
   }
 }
+

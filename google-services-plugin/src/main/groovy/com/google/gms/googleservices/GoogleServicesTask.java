@@ -24,8 +24,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
+import org.gradle.api.Project;
+import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.ConfigurationContainer;
+import org.gradle.api.artifacts.Dependency;
+import org.gradle.api.artifacts.DependencySet;
 import org.gradle.api.resources.TextResource;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
@@ -35,6 +41,7 @@ import org.gradle.api.tasks.TaskAction;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -49,84 +56,31 @@ public class GoogleServicesTask extends DefaultTask {
   private static final String OAUTH_CLIENT_TYPE_WEB = "3";
 
   private static final Pattern GOOGLE_APP_ID_REGEX =
-      Pattern.compile("(\\d+):(\\d+):(\\p{Alnum}+):(\\p{XDigit}+)");
+          Pattern.compile("(\\d+):(\\d+):(\\p{Alnum}+):(\\p{XDigit}+)");
   private static final String GOOGLE_APP_ID_VERSION = "1";
-
-  private File quickstartFile;
-  private File intermediateDir;
-  private String packageNameXOR1;
-  private TextResource packageNameXOR2;
-  private String searchedLocation;
 
   /**
    * The input is not technically optional but we want to control the error message.
    * Without @Optional, Gradle will complain itself the file is missing.
    */
-  @InputFile @Optional
-  public File getQuickstartFile() {
-    return quickstartFile;
-  }
+  @InputFile @Optional public File quickstartFile;
 
-  @OutputDirectory
-  public File getIntermediateDir() {
-    return intermediateDir;
-  }
+  @OutputDirectory public File intermediateDir;
 
-  /**
-   * Either packageNameXOR1 or packageNameXOR2 must be present, but both must be marked as @Optional or Gradle
-   * will throw an exception if one is missing.
-   */
-  @Input @Optional
-  public String getPackageNameXOR1() {
-    return packageNameXOR1;
-  }
+  @Input public String packageNameXOR1;
 
-  @Input @Optional
-  public TextResource getPackageNameXOR2() {
-    return packageNameXOR2;
-  }
+  @Input public TextResource packageNameXOR2;
 
-  @Input
-  public String getSearchedLocation() {
-    return searchedLocation;
-  }
-
-  public void setQuickstartFile(File quickstartFile) {
-    this.quickstartFile = quickstartFile;
-  }
-
-  public void setIntermediateDir(File intermediateDir) {
-    this.intermediateDir = intermediateDir;
-  }
-
-  public void setPackageNameXOR1(String packageNameXOR1) {
-    this.packageNameXOR1 = packageNameXOR1;
-  }
-
-  public void setPackageNameXOR2(TextResource packageNameXOR2) {
-    this.packageNameXOR2 = packageNameXOR2;
-  }
-
-  public void setSearchedLocation(String searchedLocation) {
-    this.searchedLocation = searchedLocation;
-  }
-
+  @Input public String searchedLocation;
 
   @TaskAction
   public void action() throws IOException {
     if (!quickstartFile.isFile()) {
       throw new GradleException(
-          String.format(
-              "File %s is missing. "
-                  + "The Google Services Plugin cannot function without it. %n Searched Location: %s",
-              quickstartFile.getName(), searchedLocation));
-    }
-    if (packageNameXOR1 == null && packageNameXOR2 == null) {
-      throw new GradleException(
               String.format(
-                      "One of packageNameXOR1 or packageNameXOR2 are required: "
-                              + "packageNameXOR1: %s, packageNameXOR2: %s",
-                      packageNameXOR1, packageNameXOR2));
+                      "File %s is missing. "
+                              + "The Google Services Plugin cannot function without it. %n Searched Location: %s",
+                      quickstartFile.getName(), searchedLocation));
     }
 
     getProject().getLogger().warn("Parsing json file: " + quickstartFile.getPath());
@@ -145,8 +99,8 @@ public class GoogleServicesTask extends DefaultTask {
 
     JsonObject rootObject = root.getAsJsonObject();
 
-    Map<String, String> resValues = new TreeMap<>();
-    Map<String, Map<String, String>> resAttributes = new TreeMap<>();
+    Map<String, String> resValues = new TreeMap<String, String>();
+    Map<String, Map<String, String>> resAttributes = new TreeMap<String, Map<String, String>>();
 
     handleProjectNumberAndProjectId(rootObject, resValues);
     handleFirebaseUrl(rootObject, resValues);
@@ -169,12 +123,12 @@ public class GoogleServicesTask extends DefaultTask {
       throw new GradleException("Failed to create folder: " + values);
     }
 
-    Files.asCharSink(new File(values, "values.xml"), Charsets.UTF_8)
-        .write(getValuesContent(resValues, resAttributes));
+    Files.write(
+            getValuesContent(resValues, resAttributes), new File(values, "values.xml"), Charsets.UTF_8);
   }
 
   private void handleFirebaseUrl(JsonObject rootObject, Map<String, String> resValues)
-      throws IOException {
+          throws IOException {
     JsonObject projectInfo = rootObject.getAsJsonObject("project_info");
     if (projectInfo == null) {
       throw new GradleException("Missing project_info object");
@@ -194,7 +148,7 @@ public class GoogleServicesTask extends DefaultTask {
    * @throws IOException
    */
   private void handleProjectNumberAndProjectId(JsonObject rootObject, Map<String, String> resValues)
-      throws IOException {
+          throws IOException {
     JsonObject projectInfo = rootObject.getAsJsonObject("project_info");
     if (projectInfo == null) {
       throw new GradleException("Missing project_info object");
@@ -255,7 +209,7 @@ public class GoogleServicesTask extends DefaultTask {
    * @throws IOException
    */
   private void handleAnalytics(JsonObject clientObject, Map<String, String> resValues)
-      throws IOException {
+          throws IOException {
     JsonObject analyticsService = getServiceByName(clientObject, "analytics_service");
     if (analyticsService == null) return;
 
@@ -272,8 +226,10 @@ public class GoogleServicesTask extends DefaultTask {
       throw new GradleException("Failed to create folder: " + xml);
     }
 
-    Files.asCharSink(new File(xml, "global_tracker.xml"), Charsets.UTF_8)
-        .write(getGlobalTrackerContent(trackingId.getAsString()));
+    Files.write(
+            getGlobalTrackerContent(trackingId.getAsString()),
+            new File(xml, "global_tracker.xml"),
+            Charsets.UTF_8);
   }
 
   /**
@@ -283,7 +239,7 @@ public class GoogleServicesTask extends DefaultTask {
    * @throws IOException
    */
   private void handleMapsService(JsonObject clientObject, Map<String, String> resValues)
-      throws IOException {
+          throws IOException {
     JsonObject mapsService = getServiceByName(clientObject, "maps_service");
     if (mapsService == null) return;
 
@@ -330,7 +286,7 @@ public class GoogleServicesTask extends DefaultTask {
   }
 
   private static void findStringByName(
-      JsonObject jsonObject, String stringName, Map<String, String> resValues) {
+          JsonObject jsonObject, String stringName, Map<String, String> resValues) {
     JsonPrimitive id = jsonObject.getAsJsonPrimitive(stringName);
     if (id != null) {
       resValues.put(stringName, id.getAsString());
@@ -375,7 +331,7 @@ public class GoogleServicesTask extends DefaultTask {
 
   /** Handle a client object for Google App Id. */
   private void handleGoogleAppId(JsonObject clientObject, Map<String, String> resValues)
-      throws IOException {
+          throws IOException {
     JsonObject clientInfo = clientObject.getAsJsonObject("client_info");
     if (clientInfo == null) {
       // Should not happen
@@ -387,27 +343,27 @@ public class GoogleServicesTask extends DefaultTask {
     String googleAppIdStr = googleAppId == null ? null : googleAppId.getAsString();
     if (Strings.isNullOrEmpty(googleAppIdStr)) {
       throw new GradleException(
-          "Missing Google App Id. "
-              + "Please follow instructions on https://firebase.google.com/ to get a valid "
-              + "config file that contains a Google App Id");
+              "Missing Google App Id. "
+                      + "Please follow instructions on https://firebase.google.com/ to get a valid "
+                      + "config file that contains a Google App Id");
     }
 
     Matcher matcher = GOOGLE_APP_ID_REGEX.matcher(googleAppIdStr);
     if (!matcher.matches()) {
       throw new GradleException(
-          "Unexpected format of Google App ID. "
-              + "Please follow instructions on https://firebase.google.com/ to get a config file "
-              + "that contains a valid Google App Id or update the plugin version if you believe "
-              + "your Google App Id ["
-              + googleAppIdStr
-              + "] is correct.");
+              "Unexpected format of Google App ID. "
+                      + "Please follow instructions on https://firebase.google.com/ to get a config file "
+                      + "that contains a valid Google App Id or update the plugin version if you believe "
+                      + "your Google App Id ["
+                      + googleAppIdStr
+                      + "] is correct.");
     }
 
     String version = matcher.group(1);
     if (!GOOGLE_APP_ID_VERSION.equals(version)) {
       throw new GradleException(
-          "Google App Id Version is incompatible with this plugin. "
-              + "Please update the plugin version.");
+              "Google App Id Version is incompatible with this plugin. "
+                      + "Please update the plugin version.");
     }
 
     String platform = matcher.group(3);
@@ -441,10 +397,10 @@ public class GoogleServicesTask extends DefaultTask {
     if (STATUS_DISABLED.equals(statusStr)) return null;
     if (!STATUS_ENABLED.equals(statusStr)) {
       getLogger()
-          .warn(
-              String.format(
-                  "Status with value '%1$s' for service '%2$s' is unknown",
-                  statusStr, serviceName));
+              .warn(
+                      String.format(
+                              "Status with value '%1$s' for service '%2$s' is unknown",
+                              statusStr, serviceName));
       return null;
     }
 
@@ -453,15 +409,15 @@ public class GoogleServicesTask extends DefaultTask {
 
   private static String getGlobalTrackerContent(String ga_trackingId) {
     return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-        + "<resources>\n"
-        + "    <string name=\"ga_trackingId\" translatable=\"false\">"
-        + ga_trackingId
-        + "</string>\n"
-        + "</resources>\n";
+            + "<resources>\n"
+            + "    <string name=\"ga_trackingId\" translatable=\"false\">"
+            + ga_trackingId
+            + "</string>\n"
+            + "</resources>\n";
   }
 
   private static String getValuesContent(
-      Map<String, String> values, Map<String, Map<String, String>> attributes) {
+          Map<String, String> values, Map<String, Map<String, String>> attributes) {
     StringBuilder sb = new StringBuilder(256);
 
     sb.append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" + "<resources>\n");
@@ -502,7 +458,7 @@ public class GoogleServicesTask extends DefaultTask {
       throw new GradleException("Failed to delete: " + folder);
     }
   }
-  
+
   private String getPackageName() {
     if (packageNameXOR1 == null) {
       return packageNameXOR2.asString();
@@ -510,3 +466,4 @@ public class GoogleServicesTask extends DefaultTask {
     return packageNameXOR1;
   }
 }
+
